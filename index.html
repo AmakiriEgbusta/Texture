@@ -517,12 +517,15 @@
                
        // Function to load location data from Firebase Realtime Database
        async function loadLocationDataFromFirebase() {
+           console.log('Starting Firebase data load...');
            try {
                // Get all location data
                const locationRef = ref(db, 'locationData');
                const snapshot = await get(locationRef);
                       
+               console.log('Firebase snapshot exists:', snapshot.exists());
                if (!snapshot.exists()) {
+                   console.log('No data found in Firebase');
                    // No data found
                    document.getElementById('device-count').textContent = '0';
                    document.getElementById('last-update').textContent = '--:--:--';
@@ -564,9 +567,13 @@
                       
                // Get the data and convert to array
                const data = snapshot.val();
+               console.log('Raw Firebase data:', data);
                const entries = Object.values(data);
+               console.log('Entries array:', entries);
                       
+               console.log('Entries length:', entries.length);
                if (entries.length === 0) {
+                   console.log('Empty database');
                    // Empty database
                    document.getElementById('device-count').textContent = '0';
                    document.getElementById('last-update').textContent = '--:--:--';
@@ -606,6 +613,7 @@
                    return;
                }
                       
+               console.log('Starting timestamp search...');
                // Find the most recent entry by timestamp (client-side)
                let latestData = null;
                let latestTimestamp = 0;
@@ -618,6 +626,12 @@
                    } else if (entry.timestamp && typeof entry.timestamp === 'string') {
                        // Try to parse ISO string
                        const parsed = Date.parse(entry.timestamp);
+                       if (!isNaN(parsed)) {
+                           timestamp = parsed;
+                       }
+                   } else if (entry.storedAt && typeof entry.storedAt === 'string') {
+                       // Try to parse storedAt ISO string
+                       const parsed = Date.parse(entry.storedAt);
                        if (!isNaN(parsed)) {
                            timestamp = parsed;
                        }
