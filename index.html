@@ -518,12 +518,9 @@
        // Function to load location data from Firebase Realtime Database
        async function loadLocationDataFromFirebase() {
            try {
-               // Get most recent location data (limit to 1 entry)
+               // Get all location data
                const locationRef = ref(db, 'locationData');
-               const latestQuery = rtQuery(locationRef, orderByChild('timestamp'), limitToLast(1));
-                      
-               // Use get() for one-time read instead of onValue()
-               const snapshot = await get(latestQuery);
+               const snapshot = await get(locationRef);
                       
                if (!snapshot.exists()) {
                    // No data found
@@ -609,8 +606,72 @@
                    return;
                }
                       
-               // Get the most recent entry (last in array since ordered by timestamp)
-               const latestData = entries[entries.length - 1];
+               // Find the most recent entry by timestamp (client-side)
+               let latestData = null;
+               let latestTimestamp = 0;
+               
+               for (const entry of entries) {
+                   // Try to get timestamp from various possible fields
+                   let timestamp = 0;
+                   if (entry.timestamp && typeof entry.timestamp === 'number') {
+                       timestamp = entry.timestamp;
+                   } else if (entry.timestamp && typeof entry.timestamp === 'string') {
+                       // Try to parse ISO string
+                       const parsed = Date.parse(entry.timestamp);
+                       if (!isNaN(parsed)) {
+                           timestamp = parsed;
+                       }
+                   } else if (entry.createdAt && typeof entry.createdAt === 'number') {
+                       timestamp = entry.createdAt;
+                   } else if (entry.date && typeof entry.date === 'number') {
+                       timestamp = entry.date;
+                   }
+                   
+                   if (timestamp > latestTimestamp) {
+                       latestTimestamp = timestamp;
+                       latestData = entry;
+                   }
+               }
+                      
+               if (!latestData) {
+                   // No valid timestamp found
+                   document.getElementById('device-count').textContent = entries.length.toString();
+                   document.getElementById('last-update').textContent = '--:--:--';
+                   document.getElementById('avg-accuracy').textContent = '-- m';
+                   document.getElementById('local-time').textContent = '--';
+                   document.getElementById('timezone').textContent = '--';
+                          
+                   // Clear all detail fields
+                   const detailFields = [
+                       'latitude', 'longitude', 'accuracy', 'timestamp', 'local-time',
+                       'timezone', 'ip-address', 'city', 'region', 'country',
+                       'postal-code', 'plus-code', 'altitude', 'heading', 'speed',
+                       'device-type', 'browser', 'platform', 'screen-resolution',
+                       'connection', 'online-status', 'battery-level', 'user-agent'
+                   ];
+                          
+                   detailFields.forEach(field => {
+                       const element = document.getElementById(field);
+                       if (element) {
+                           element.textContent = '--';
+                           if (field === 'accuracy') {
+                               element.innerHTML = '-- m <span class="accuracy-indicator accuracy-low">Low</span>';
+                           }
+                       }
+                   });
+                          
+                   // Update map placeholder
+                   const mapPlaceholder = document.querySelector('.map-placeholder');
+                   mapPlaceholder.innerHTML = `
+                       <i>🔍</i>
+                       <h3>No Valid Timestamp Data</h3>
+                       <p>Data exists but no valid timestamp found for sorting</p>
+                       <p style="margin-top: 15px; font-size: 0.9rem; color: #6c757d;">Check your tracking page's timestamp format</p>
+                   `;
+                          
+                   document.getElementById('last-updated-time').textContent = 'No valid timestamp';
+                   return;
+               }
                       
                // Get total count
                const countRef = ref(db, 'locationData');
