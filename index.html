@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BodyCam Authentication Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0A0E27;
+            color: #00FF00;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .lock-screen {
+            background: #1A1F3A;
+            border: 2px solid #6C63FF;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 0 40px rgba(108, 99, 255, 0.5);
+        }
+        
+        .lock-icon {
+            font-size: 4em;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #6C63FF;
+            margin-bottom: 30px;
+            font-size: 1.8em;
+        }
+        
+        .password-input {
+            width: 100%;
+            padding: 15px;
+            background: #0A0E27;
+            border: 2px solid #6C63FF;
+            border-radius: 8px;
+            color: #00FF00;
+            font-family: 'Courier New', monospace;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+        
+        .password-input:focus {
+            outline: none;
+            border-color: #00E5FF;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+        }
+        
+        .unlock-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #6C63FF, #00E5FF);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .unlock-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        .error-msg {
+            color: #FF5252;
+            text-align: center;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .data-section {
+            display: none;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #6C63FF;
+        }
+        
+        .section-title {
+            color: #00E5FF;
+            font-size: 1.4em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .account-list, .device-list {
+            background: #0A0E27;
+            border: 1px solid #6C63FF;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .account-item, .device-item {
+            background: #1A1F3A;
+            border: 1px solid rgba(108, 99, 255, 0.3);
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .username, .device-id {
+            color: #00FF00;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 8px;
+        }
+        
+        .info {
+            color: #888;
+            font-size: 0.9em;
+            margin: 4px 0;
+        }
+        
+        .timestamp {
+            text-align: center;
+            color: #888;
+            font-size: 0.8em;
+            margin-top: 20px;
+        }
+        
+        /* Hidden API endpoint for app communication */
+        #apiEndpoint {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="lock-screen" id="lockScreen">
+        <div class="lock-icon">🔒</div>
+        <h1>BODYCAM AUTH SERVER</h1>
+        
+        <input 
+            type="password" 
+            class="password-input" 
+            id="passwordInput"
+            placeholder="Enter Access Password"
+        >
+        
+        <button class="unlock-btn" onclick="unlock()">🔓 UNLOCK</button>
+        
+        <div class="error-msg" id="errorMsg">❌ Incorrect Password!</div>
+        
+        <div class="data-section" id="dataSection">
+            <h2 class="section-title">🔐 REGISTERED ACCOUNTS</h2>
+            
+            <div class="account-list" id="accountList">
+                <!-- Accounts will be loaded here -->
+            </div>
+            
+            <h2 class="section-title">📱 REGISTERED DEVICES</h2>
+            
+            <div class="device-list" id="deviceList">
+                <!-- Devices will be loaded here -->
+            </div>
+            
+            <div class="timestamp" id="timestamp"></div>
+        </div>
+    </div>
+    
+    <!-- Hidden API endpoint for background app communication -->
+    <div id="apiEndpoint"></div>
+    
+    <script>
+        // Access password
+        const ACCESS_PASSWORD = 'ENNY5969@@';
+        
+        // Backend database - UPDATE THIS MANUALLY ON GITHUB
+        let backendData = {
+            "accounts": [
+                {
+                    "username": "admin",
+                    "email": "admin@bodycam.com",
+                    "phone": "+1234567890",
+                    "passwordHash": "admin123",
+                    "createdAt": new Date().toISOString(),
+                    "lastLogin": null
+                }
+            ],
+            "devices": [
+                {
+                    "id": "DEMO1234",
+                    "name": "Demo Device",
+                    "model": "BodyCam Pro",
+                    "serial": "SN-DEMO001",
+                    "imei": "IMEI-DEMO123",
+                    "status": "Online",
+                    "batteryLevel": 100,
+                    "registrationTimestamp": new Date().toISOString(),
+                    "lastSeen": new Date().toISOString()
+                }
+            ],
+            "lastUpdated": new Date().toISOString()
+        };
+        
+        // Manual unlock for human users
+        function unlock() {
+            const input = document.getElementById('passwordInput').value;
+            const errorMsg = document.getElementById('errorMsg');
+            const dataSection = document.getElementById('dataSection');
+            
+            if (input === ACCESS_PASSWORD) {
+                errorMsg.style.display = 'none';
+                dataSection.style.display = 'block';
+                renderData();
+            } else {
+                errorMsg.style.display = 'block';
+                dataSection.style.display = 'none';
+            }
+        }
+        
+        // Render data to HTML
+        function renderData() {
+            const accountList = document.getElementById('accountList');
+            const deviceList = document.getElementById('deviceList');
+            const timestamp = document.getElementById('timestamp');
+            
+            // Render accounts
+            if (backendData.accounts.length === 0) {
+                accountList.innerHTML = '<div style="color: #888; text-align: center;">No accounts registered</div>';
+            } else {
+                accountList.innerHTML = backendData.accounts.map(acc => `
+                    <div class="account-item">
+                        <div class="username">👤 ${acc.username}</div>
+                        <div class="info">📧 ${acc.email || 'N/A'}</div>
+                        <div class="info">📱 ${acc.phone || 'N/A'}</div>
+                        <div class="info">📅 Created: ${new Date(acc.createdAt).toLocaleString()}</div>
+                        <div class="info">🕐 Last Login: ${acc.lastLogin ? new Date(acc.lastLogin).toLocaleString() : 'Never'}</div>
+                    </div>
+                `).join('');
+            }
+            
+            // Render devices
+            if (backendData.devices.length === 0) {
+                deviceList.innerHTML = '<div style="color: #888; text-align: center;">No devices registered</div>';
+            } else {
+                deviceList.innerHTML = backendData.devices.map(dev => `
+                    <div class="device-item">
+                        <div class="device-id">📱 ${dev.id}</div>
+                        <div class="info">📦 Model: ${dev.model}</div>
+                        <div class="info">🔢 Serial: ${dev.serial}</div>
+                        <div class="info">📊 Status: ${dev.status}</div>
+                        <div class="info">🔋 Battery: ${dev.batteryLevel}%</div>
+                        <div class="info">📅 Registered: ${new Date(dev.registrationTimestamp).toLocaleString()}</div>
+                    </div>
+                `).join('');
+            }
+            
+            timestamp.textContent = `Last Updated: ${new Date().toLocaleString()}`;
+        }
+        
+        // ============================================
+        // API FOR ANDROID APP (Background Communication)
+        // ============================================
+        
+        // Expose API to Android WebView
+        window.BodyCamAPI = {
+            // Authenticate app with password
+            authenticate: function(password) {
+                if (password === ACCESS_PASSWORD) {
+                    return JSON.stringify({
+                        success: true,
+                        message: "Authentication successful",
+                        data: backendData
+                    });
+                } else {
+                    return JSON.stringify({
+                        success: false,
+                        message: "Invalid password"
+                    });
+                }
+            },
+            
+            // Check if user account exists and validate password
+            validateLogin: function(username, password) {
+                const account = backendData.accounts.find(
+                    acc => acc.username.toLowerCase() === username.toLowerCase()
+                );
+                
+                if (!account) {
+                    return JSON.stringify({
+                        success: false,
+                        message: "User not found",
+                        userExists: false
+                    });
+                }
+                
+                if (account.passwordHash !== password) {
+                    return JSON.stringify({
+                        success: false,
+                        message: "Invalid password",
+                        userExists: true
+                    });
+                }
+                
+                // Update last login
+                account.lastLogin = new Date().toISOString();
+                backendData.lastUpdated = new Date().toISOString();
+                
+                return JSON.stringify({
+                    success: true,
+                    message: "Login successful",
+                    user: account,
+                    userExists: true
+                });
+            },
+            
+            // Register new user account
+            registerUser: function(username, email, phone, password) {
+                const existing = backendData.accounts.find(
+                    acc => acc.username.toLowerCase() === username.toLowerCase()
+                );
+                
+                if (existing) {
+                    return JSON.stringify({
+                        success: false,
+                        message: "Username already exists"
+                    });
+                }
+                
+                const newAccount = {
+                    username: username,
+                    email: email,
+                    phone: phone,
+                    passwordHash: password,
+                    createdAt: new Date().toISOString(),
+                    lastLogin: null
+                };
+                
+                backendData.accounts.push(newAccount);
+                backendData.lastUpdated = new Date().toISOString();
+                
+                return JSON.stringify({
+                    success: true,
+                    message: "User registered successfully",
+                    user: newAccount
+                });
+            },
+            
+            // Register new device
+            registerDevice: function(deviceData) {
+                const existing = backendData.devices.find(
+                    dev => dev.id === deviceData.id
+                );
+                
+                if (existing) {
+                    // Update existing device
+                    Object.assign(existing, deviceData, {
+                        lastSeen: new Date().toISOString()
+                    });
+                } else {
+                    // Add new device
+                    backendData.devices.push({
+                        ...deviceData,
+                        registrationTimestamp: new Date().toISOString(),
+                        lastSeen: new Date().toISOString()
+                    });
+                }
+                
+                backendData.lastUpdated = new Date().toISOString();
+                
+                return JSON.stringify({
+                    success: true,
+                    message: "Device registered successfully"
+                });
+            },
+            
+            // Get all devices
+            getAllDevices: function() {
+                return JSON.stringify({
+                    success: true,
+                    devices: backendData.devices
+                });
+            },
+            
+            // Get device by ID
+            getDevice: function(deviceId) {
+                const device = backendData.devices.find(dev => dev.id === deviceId);
+                
+                if (!device) {
+                    return JSON.stringify({
+                        success: false,
+                        message: "Device not found"
+                    });
+                }
+                
+                return JSON.stringify({
+                    success: true,
+                    device: device
+                });
+            },
+            
+            // Update device status
+            updateDeviceStatus: function(deviceId, status, batteryLevel) {
+                const device = backendData.devices.find(dev => dev.id === deviceId);
+                
+                if (!device) {
+                    return JSON.stringify({
+                        success: false,
+                        message: "Device not found"
+                    });
+                }
+                
+                device.status = status;
+                if (batteryLevel !== undefined) {
+                    device.batteryLevel = batteryLevel;
+                }
+                device.lastSeen = new Date().toISOString();
+                backendData.lastUpdated = new Date().toISOString();
+                
+                return JSON.stringify({
+                    success: true,
+                    message: "Device status updated"
+                });
+            },
+            
+            // Get all data (full sync)
+            getAllData: function() {
+                return JSON.stringify({
+                    success: true,
+                    data: backendData
+                });
+            }
+        };
+        
+        // Enter key support for manual unlock
+        document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                unlock();
+            }
+        });
+        
+        // Auto-render on load
+        renderData();
+        
+        // Log that API is ready
+        console.log('✅ BodyCam API is ready for background communication');
+    </script>
+</body>
+</html>
